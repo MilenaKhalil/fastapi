@@ -17,5 +17,3 @@ class BookInfoSchema(BaseModel):
 	author: str
 	nice_cover: Optional[bool]
 	
-# class BookAddSchema(BookInfoSchema):
-# 	id: int

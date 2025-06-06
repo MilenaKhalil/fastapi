@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from role_enum import Role
 
 class Base(DeclarativeBase):
 	pass
@@ -16,6 +17,7 @@ class UserModel(Base):
 	id: Mapped[int] = mapped_column(primary_key=True)
 	email: Mapped[str] = mapped_column()
 	password: Mapped[str] = mapped_column()
+	scope: Mapped[Role] = mapped_column(default=Role.USER)
 
 engine = create_async_engine('sqlite+aiosqlite:///data.db')
 
