@@ -4,24 +4,13 @@ from fastapi import HTTPException, APIRouter, Depends
 from schema import BookInfoSchema, UserInfoSchema
 from sqlalchemy import select
 from typing import List
-from books_base import books
+# from books_base import books
 from users_base import users
 
 book_router = APIRouter(prefix="/books", tags=["Books"])
 user_router = APIRouter(prefix="/users", tags=["Users"])
 
 #books
-
-@book_router.get("/books", tags = ["Books"], summary = "получить все книги")
-def get_all_books():
-	return books
-
-@book_router.get("/books/{book_id}", tags = ["Books"], summary = "получить книгу по id")
-def get_book(book_id: int):
-	for book in books:
-		if book["id"] == book_id:
-			return book
-	raise HTTPException(status_code=404, detail="Книга не найдена :(")
 
 @book_router.post("/add_book", tags=["Books"], summary="add book to a database")
 async def add_book_to_db(book: BookInfoSchema, session: AsyncSession = Depends(get_session)):
