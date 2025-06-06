@@ -1,6 +1,6 @@
 import jwt
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Response, Request, Cookie
+from fastapi import APIRouter, Response, Form
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from database import UserModel, get_session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,12 +9,12 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from schema import UserInfoSchema
 from passlib.context import CryptContext
 from sqlalchemy import select
-from pydantic import EmailStr
-from typing import Optional
+from pydantic import EmailStr, BaseModel
+from typing import Optional, Union
 from datetime import timezone
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_schema = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 def get_password_hash(password: str) -> str:
 	return pwd_context.hash(password)
@@ -34,20 +34,35 @@ async def register(user: UserInfoSchema, session: AsyncSession = Depends(get_ses
 	await session.commit()
 	return {"ok": True}
 
-@auth_router.get("/protected", tags=["Auth"])
-async def get_secret_info(access_token: Optional[str] = Cookie(default=None)):
-	if not access_token:
-		raise HTTPException(status_code=401, detail="Не найден токен авторизации")
+async def get_current_user(
+	token: str = Depends(oauth2_schema),
+	session: AsyncSession = Depends(get_session)
+) -> UserModel:
 	try:
-		payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
+		payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 		user_id = payload.get("user_id")
 		if user_id is None:
 			raise HTTPException(status_code=401, detail="Неверный токен")
-		return {"secret": "This is a secret message"}
+		
+		query = select(UserModel).where(UserModel.id == user_id)
+		result = await session.execute(query)
+		user = result.scalar_one_or_none()
+		
+		if user is None:
+			raise HTTPException(status_code=401, detail="Пользователь не найден")
+			
+		return user
 	except jwt.ExpiredSignatureError:
 		raise HTTPException(status_code=401, detail="Токен истек")
 	except jwt.JWTError:
 		raise HTTPException(status_code=401, detail="Неверный формат токена")
+
+@auth_router.get("/protected", tags=["Auth"])
+async def get_secret_info(current_user: UserModel = Depends(get_current_user)):
+	return {
+		"secret": "This is a secret message",
+		"user_email": current_user.email
+	}
 
 def create_access_token(user_id: int):
 	to_encode = {"user_id": user_id}
@@ -57,7 +72,7 @@ def create_access_token(user_id: int):
 	return encoded_jwt
 
 # мб прооверять уникальность почты?
-async def get_user_by_email(email: EmailStr, session: AsyncSession = Depends(get_session)) -> Optional[int]:
+async def get_user_by_email(email: EmailStr, session: AsyncSession) -> Optional[int]:
 	query = select(UserModel).where(UserModel.email == email)
 	result = await session.execute(query)
 	user = result.scalar_one_or_none()
@@ -65,27 +80,60 @@ async def get_user_by_email(email: EmailStr, session: AsyncSession = Depends(get
 		return False
 	return user.id
 
-@auth_router.post("/login", tags=["Auth"])
-async def login(email: EmailStr, pl_pwd: str, response: Response, session: AsyncSession = Depends(get_session)):
-	if await get_user_by_email(email, session) is False:
+class LoginSchema(BaseModel):
+	email: EmailStr
+	password: str
+
+@auth_router.post("/token", tags=["Auth"])
+async def login_for_access_token(
+	form_data: OAuth2PasswordRequestForm = Depends(),
+	session: AsyncSession = Depends(get_session)
+):
+	user_id = await get_user_by_email(form_data.username, session)
+	if user_id is False:
 		raise HTTPException(status_code=404, detail="Пользователь не найден")
-	query = select(UserModel).where(UserModel.email == email)
+	
+	query = select(UserModel).where(UserModel.email == form_data.username)
 	result = await session.execute(query)
 	user = result.scalar_one()
-	if verify_password(pl_pwd, user.password) is False:
-		raise HTTPException(status_code=401, detail="Неверный пароль")
+	
+	if verify_password(form_data.password, user.password) is False:
+		raise HTTPException(
+			status_code=401,
+			detail="Неверный пароль",
+			headers={"WWW-Authenticate": "Bearer"},
+		)
+	
 	access_token = create_access_token(user.id)
-	response.set_cookie(
-        key="access_token", 
-        value=access_token, 
-        httponly=True,
-        max_age=60*ACCESS_TOKEN_EXPIRE_MINUTES,
-        secure=True,
-        samesite="lax"
-    )
-	return {"message": "Вы успешно вошли в систему"}
+	return {
+		"access_token": access_token,
+		"token_type": "bearer"
+	}
+
+@auth_router.post("/login", tags=["Auth"])
+async def login(
+	login_data: LoginSchema,
+	session: AsyncSession = Depends(get_session)
+):
+	user_id = await get_user_by_email(login_data.email, session)
+	if user_id is False:
+		raise HTTPException(status_code=404, detail="Пользователь не найден")
+	
+	query = select(UserModel).where(UserModel.email == login_data.email)
+	result = await session.execute(query)
+	user = result.scalar_one()
+	
+	if verify_password(login_data.password, user.password) is False:
+		raise HTTPException(status_code=401, detail="Неверный пароль")
+	
+	access_token = create_access_token(user.id)
+	
+	return {
+		"access_token": access_token,
+		"token_type": "bearer"
+	}
 
 @auth_router.get("/logout", tags=["Auth"])
 async def logout(response: Response):
-	response.delete_cookie("access_token")
+	response.delete_cookie("tokenUrl")
 	return {"message": "Вы успешно вышли из системы"}

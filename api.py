@@ -3,9 +3,7 @@ from database import BookModel, Base, get_session, engine
 from fastapi import HTTPException, APIRouter, Depends
 from schema import BookInfoSchema, UserInfoSchema
 from sqlalchemy import select
-from typing import List
-# from books_base import books
-from users_base import users
+# from typing import List
 
 book_router = APIRouter(prefix="/books", tags=["Books"])
 user_router = APIRouter(prefix="/users", tags=["Users"])
@@ -30,16 +28,7 @@ async def get_book_from_db(session: AsyncSession = Depends(get_session)):
 
 #users
 
-@user_router.post("/users", tags=["Users"], summary="добавить Юзера")
-def add_user(new_user: UserInfoSchema):
-	users.append(new_user)
-	return {"ok": True}
-
-@user_router.get("/users", tags=["Users"], summary="все юзеры")
-def get_all_users() -> List[UserInfoSchema]:
-	return users
-
-@user_router.post("/create")
-async def init_user_table():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+# @user_router.post("/create_database")
+# async def init_user_table():
+#     async with engine.begin() as conn:
+#         await conn.run_sync(Base.metadata.create_all)
