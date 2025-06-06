@@ -1,7 +1,8 @@
 # import uvicorn
 from database import init_database
 from fastapi import FastAPI
-from api import book_router, user_router
+from api import book_router
+from user import user_router
 from auth import auth_router
 
 app = FastAPI()

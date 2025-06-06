@@ -5,7 +5,6 @@ from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from database import UserModel, get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from schema import UserInfoSchema
 from role_enum import Role
 from passlib.context import CryptContext
 from sqlalchemy import select
@@ -22,17 +21,6 @@ def verify_password(plain_pwd: str, hashed_pwd: str) -> bool:
 	return pwd_context.verify(plain_pwd, hashed_pwd)
 
 auth_router = APIRouter(prefix="/auth", tags=["Auth"])
-
-@auth_router.post("/registration", tags=["Auth"])
-async def register(user: UserInfoSchema, session: AsyncSession = Depends(get_session)):
-	new_user = UserModel(
-		email = user.email,
-		password = get_password_hash(user.password),
-		scope = Role.USER
-	)
-	session.add(new_user)
-	await session.commit()
-	return {"message": "Вы зарегистрированы!"}
 
 def require_role(required_scope: Role = Role.USER):
 	async def check_permission(current_user: UserModel = Depends(get_current_user)):
@@ -56,10 +44,7 @@ async def get_current_user(
 		
 		if isinstance(user_id, dict):
 			user_id = user_id.get("user_id")
-			
-		# if not isinstance(user_id, int):
-		# 	raise HTTPException(status_code=401, detail="Неверный формат токена")
-		
+
 		query = select(UserModel).where(UserModel.id == user_id)
 		result = await session.execute(query)
 		user = result.scalar_one_or_none()
@@ -75,8 +60,7 @@ async def get_current_user(
 @auth_router.get("/protected", tags=["Auth"])
 async def get_secret_info(current_user: UserModel = Depends(get_current_user)):
 	return {
-		"secret": "На самом деле книги в этой базе данных не настоящие",
-		"user_email": current_user.email
+		"secret": "На самом деле книги в этой базе данных не настоящие"
 	}
 
 def create_access_token(user_id: int):

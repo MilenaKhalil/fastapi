@@ -3,11 +3,10 @@ from database import BookModel, get_session
 from fastapi import APIRouter, Depends
 from schema import BookInfoSchema
 from role_enum import Role
-from auth import require_role
+from auth import require_role, get_current_user
 from sqlalchemy import select
 
 book_router = APIRouter(prefix="/books", tags=["Books"])
-user_router = APIRouter(prefix="/users", tags=["Users"])
 
 #books
 
@@ -25,11 +24,10 @@ async def add_book_to_db(book: BookInfoSchema, session: AsyncSession = Depends(g
 	await session.commit()
 	return {"massage": "Книга добавлена"}
 
-@book_router.get("/book_db", tags=["Books"], summary="get books from database")
-async def get_book_from_db(session: AsyncSession = Depends(get_session)):
+@book_router.get("/book_db", tags=["Books"],
+				 summary="get books from database",
+				 dependencies=[Depends(get_current_user)])
+async def get_all_books(session: AsyncSession = Depends(get_session)):
 	query = select(BookModel)
 	result = await session.execute(query)
 	return result.scalars().all()
-
-#users
-
