@@ -15,7 +15,7 @@ app.include_router(auth_router)
 async def startup_event():
     await init_database()
 
-#sudo kill -9 
+#sudo kill -9 <PID>
 
 # if __name__ == "__main__":
 # 	uvicorn.run("main:app", port=8003, reload=True)
